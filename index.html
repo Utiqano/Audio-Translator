@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-Time English to French Audio Translator</title>
+    <title>Real-Time Audio Translator</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <style>
         body {
             font-family: 'Poppins', sans-serif;
@@ -80,17 +80,27 @@
             width: clamp(150px, 40vw, 200px);
             font-size: clamp(0.9rem, 3vw, 1rem);
         }
-        button:hover {
+        button:hover, button:focus {
             transform: scale(1.05);
             box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
             background: linear-gradient(45deg, #2563eb, #7e22ce);
         }
         #toggleButton {
             background: linear-gradient(45deg, #ef4444, #f97316);
+            position: relative;
+        }
+        #toggleButton.recording::before {
+            content: '🎙️';
+            position: absolute;
+            left: 10px;
+            animation: micPulse 1.5s infinite;
         }
         #toggleButton.recording {
             background: linear-gradient(45deg, #dc2626, #ea580c);
             animation: pulse 1.5s infinite;
+        }
+        #clearButton {
+            background: linear-gradient(45deg, #6b7280, #9ca3af);
         }
         #autoPlayToggle {
             background: linear-gradient(45deg, #10b981, #34d399);
@@ -100,11 +110,76 @@
             font-size: clamp(0.8rem, 2.5vw, 0.9rem);
             color: rgba(255, 255, 255, 0.9);
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            transition: color 0.3s;
+        }
+        #status.success {
+            color: #34d399;
+        }
+        #status.error {
+            color: #ef4444;
+        }
+        #status.loading {
+            color: #3b82f6;
+        }
+        select {
+            padding: 0.5rem;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.15);
+            color: #ffffff;
+            border: none;
+            font-size: clamp(0.9rem, 3vw, 1rem);
+            width: clamp(150px, 40vw, 200px);
+            margin: 0.5rem auto;
+        }
+        select:focus {
+            outline: none;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+        .illuminate-line {
+            height: 4px;
+            width: 100%;
+            background: transparent;
+            border-radius: 2px;
+            margin: 0.5rem 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .illuminate-line::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, #ffffff, transparent);
+            transition: left 0.5s;
+        }
+        .illuminate-line.recording::before {
+            background: linear-gradient(90deg, transparent, #ef4444, transparent);
+            animation: slide 2s infinite;
+        }
+        .illuminate-line.translating::before {
+            background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+            animation: slide 1.5s infinite;
+        }
+        .illuminate-line.success::before {
+            background: linear-gradient(90deg, transparent, #34d399, transparent);
+            left: 0;
+            animation: none;
+        }
+        @keyframes slide {
+            0% { left: -100%; }
+            100% { left: 100%; }
         }
         @keyframes pulse {
             0% { transform: scale(1); box-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
             50% { transform: scale(1.03); box-shadow: 0 0 20px rgba(239, 68, 68, 0.8); }
             100% { transform: scale(1); box-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+        }
+        @keyframes micPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
         }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(-10px); }
@@ -114,8 +189,9 @@
             .button-container {
                 flex-direction: row;
                 justify-content: center;
+                flex-wrap: wrap;
             }
-            button {
+            button, select {
                 width: auto;
                 min-width: 150px;
             }
@@ -128,7 +204,7 @@
             textarea {
                 height: 100px;
             }
-            button {
+            button, select {
                 padding: 0.6rem 1rem;
                 font-size: 0.9rem;
             }
@@ -141,7 +217,7 @@
                 height: 80px;
                 font-size: 0.85rem;
             }
-            button {
+            button, select {
                 padding: 0.5rem 0.8rem;
                 font-size: 0.85rem;
                 width: 100%;
@@ -153,27 +229,39 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1 class="text-2xl font-bold mb-4">Real-Time English to French Audio Translator</h1>
-        <textarea id="inputText" placeholder="Transcribed English text will appear here..." readonly></textarea>
-        <textarea id="translatedText" placeholder="Translated French text will appear here..." readonly></textarea>
+    <div class="container" role="main">
+        <h1 class="text-2xl font-bold mb-4">Real-Time Audio Translator</h1>
+        <textarea id="inputText" placeholder="Transcribed English text will appear here..." readonly aria-label="Transcribed English text"></textarea>
+        <div class="illuminate-line" id="illuminateLine"></div>
+        <textarea id="translatedText" placeholder="Translated text will appear here..." readonly aria-label="Translated text"></textarea>
+        <select id="targetLanguage" aria-label="Select target language">
+            <option value="fr">French</option>
+            <option value="es">Spanish</option>
+            <option value="de">German</option>
+        </select>
         <div class="button-container">
-            <button id="toggleButton">Start Translation</button>
-            <button id="autoPlayToggle">Auto-Play: OFF</button>
+            <button id="toggleButton" aria-label="Toggle real-time translation">Start Translation</button>
+            <button id="autoPlayToggle" aria-label="Toggle auto-play for translated audio">Auto-Play: OFF</button>
+            <button id="clearButton" aria-label="Clear text areas">Clear Text</button>
         </div>
-        <p id="status">Click "Start Translation" to begin real-time translation.</p>
+        <p id="status" role="status">Click "Start Translation" to begin real-time translation.</p>
     </div>
 
     <script>
         const toggleButton = document.getElementById('toggleButton');
         const autoPlayToggle = document.getElementById('autoPlayToggle');
+        const clearButton = document.getElementById('clearButton');
         const inputText = document.getElementById('inputText');
         const translatedText = document.getElementById('translatedText');
         const status = document.getElementById('status');
+        const targetLanguage = document.getElementById('targetLanguage');
+        const illuminateLine = document.getElementById('illuminateLine');
 
         let recognition;
         let isTranslating = false;
         let autoPlay = false;
+        let lastTranslationTime = 0;
+        const debounceDelay = 1000;
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
@@ -185,30 +273,46 @@
             recognition.onresult = async (event) => {
                 const transcript = event.results[event.results.length - 1][0].transcript;
                 inputText.value = transcript;
-                status.textContent = 'Transcribing... Translating to French...';
+                status.textContent = 'Transcribing... Translating...';
+                status.className = 'loading';
+                illuminateLine.className = 'illuminate-line translating';
+
+                const now = Date.now();
+                if (now - lastTranslationTime < debounceDelay) return;
+                lastTranslationTime = now;
 
                 try {
-                    const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(transcript)}&langpair=en|fr`);
+                    const lang = targetLanguage.value;
+                    const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(transcript)}&langpair=en|${lang}`);
                     const data = await response.json();
                     if (data.responseStatus === 200) {
                         translatedText.value = data.responseData.translatedText;
                         status.textContent = 'Translation complete.';
+                        status.className = 'success';
+                        illuminateLine.className = 'illuminate-line success';
                         if (autoPlay) {
                             const utterance = new SpeechSynthesisUtterance(translatedText.value);
-                            utterance.lang = 'fr-FR';
+                            utterance.lang = `${lang}-${lang.toUpperCase()}`;
                             speechSynthesis.speak(utterance);
-                            status.textContent = 'Playing French translation...';
+                            status.textContent = 'Playing translation...';
+                            status.className = 'success';
                         }
                     } else {
                         status.textContent = 'Translation failed. Please try again.';
+                        status.className = 'error';
+                        illuminateLine.className = 'illuminate-line';
                     }
                 } catch (error) {
-                    status.textContent = 'Error during translation: ' + error.message;
+                    status.textContent = `Error: ${error.message}. Check your connection or try again.`;
+                    status.className = 'error';
+                    illuminateLine.className = 'illuminate-line';
                 }
             };
 
             recognition.onerror = (event) => {
-                status.textContent = 'Error occurred in recognition: ' + event.error;
+                status.textContent = `Error: ${event.error}. Ensure your microphone is working.`;
+                status.className = 'error';
+                illuminateLine.className = 'illuminate-line';
                 toggleButton.textContent = 'Start Translation';
                 toggleButton.classList.remove('recording');
                 isTranslating = false;
@@ -217,26 +321,42 @@
             recognition.onend = () => {
                 if (isTranslating) {
                     recognition.start();
+                    illuminateLine.className = 'illuminate-line recording';
+                } else {
+                    illuminateLine.className = 'illuminate-line';
                 }
             };
         } else {
             status.textContent = 'Speech Recognition API not supported in this browser.';
+            status.className = 'error';
             toggleButton.disabled = true;
             autoPlayToggle.disabled = true;
+            clearButton.disabled = true;
+            illuminateLine.className = 'illuminate-line';
         }
 
         toggleButton.addEventListener('click', () => {
             if (!isTranslating) {
-                recognition.start();
-                toggleButton.textContent = 'Stop Translation';
-                toggleButton.classList.add('recording');
-                status.textContent = 'Real-time translation started. Speak in English.';
-                isTranslating = true;
+                try {
+                    recognition.start();
+                    toggleButton.textContent = 'Stop Translation';
+                    toggleButton.classList.add('recording');
+                    status.textContent = 'Real-time translation started. Speak in English.';
+                    status.className = '';
+                    illuminateLine.className = 'illuminate-line recording';
+                    isTranslating = true;
+                } catch (error) {
+                    status.textContent = 'Error starting recognition. Please check microphone permissions.';
+                    status.className = 'error';
+                    illuminateLine.className = 'illuminate-line';
+                }
             } else {
                 recognition.stop();
                 toggleButton.textContent = 'Start Translation';
                 toggleButton.classList.remove('recording');
                 status.textContent = 'Translation stopped.';
+                status.className = '';
+                illuminateLine.className = 'illuminate-line';
                 isTranslating = false;
             }
         });
@@ -245,6 +365,24 @@
             autoPlay = !autoPlay;
             autoPlayToggle.textContent = `Auto-Play: ${autoPlay ? 'ON' : 'OFF'}`;
             status.textContent = `Auto-play ${autoPlay ? 'enabled' : 'disabled'}.`;
+            status.className = autoPlay ? 'success' : '';
+        });
+
+        clearButton.addEventListener('click', () => {
+            inputText.value = '';
+            translatedText.value = '';
+            status.textContent = 'Text cleared. Ready to start translation.';
+            status.className = '';
+            illuminateLine.className = 'illuminate-line';
+        });
+
+        document.querySelectorAll('button, select').forEach(element => {
+            element.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    element.click();
+                }
+            });
         });
     </script>
 </body>
