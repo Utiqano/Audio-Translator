@@ -9,7 +9,9 @@
     <style>
         body {
             font-family: 'Poppins', sans-serif;
-            background: linear-gradient(135deg, #1a2634, #2d3748);
+            background: linear-gradient(-45deg, #0c0f1a, #1a2634, #2d3748, #0f172a, #1e293b);
+            background-size: 400% 400%;
+            animation: gradientShift 20s ease infinite;
             background-attachment: fixed;
             display: flex;
             justify-content: center;
@@ -21,6 +23,53 @@
             overflow-x: hidden;
             position: relative;
         }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(2px 2px at 20px 30px, #eee, transparent),
+                radial-gradient(2px 2px at 40px 70px, rgba(255,255,255,0.8), transparent),
+                radial-gradient(1px 1px at 90px 40px, #fff, transparent),
+                radial-gradient(1px 1px at 130px 80px, rgba(255,255,255,0.6), transparent),
+                radial-gradient(2px 2px at 160px 30px, #ddd, transparent);
+            background-repeat: repeat;
+            background-size: 200px 100px;
+            animation: starTwinkle 20s linear infinite;
+            opacity: 0.8;
+            z-index: -2;
+            will-change: transform;
+        }
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(ellipse at bottom, rgba(26, 38, 52, 0.6) 0%, transparent 50%),
+                radial-gradient(ellipse at top, rgba(12, 15, 26, 0.4) 0%, transparent 50%);
+            animation: nebulaFloat 30s ease-in-out infinite;
+            z-index: -1;
+        }
+        .nebula {
+            position: fixed;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(20, 184, 166, 0.1), transparent);
+            border-radius: 50%;
+            animation: nebulaDrift 40s linear infinite;
+            opacity: 0.3;
+            z-index: -1;
+            pointer-events: none;
+        }
+        .nebula:nth-child(1) { top: 20%; left: -20%; animation-delay: 0s; }
+        .nebula:nth-child(2) { top: 60%; right: -10%; background: radial-gradient(circle, rgba(244, 63, 94, 0.1), transparent); animation-delay: -20s; }
+        .nebula:nth-child(3) { bottom: 30%; left: 50%; background: radial-gradient(circle, rgba(6, 182, 212, 0.1), transparent); animation-delay: -10s; transform: scale(0.8); }
         .particle {
             position: absolute;
             width: 6px;
@@ -376,8 +425,45 @@
                 transform: translateY(-100px) rotate(720deg) scale(0);
             }
         }
+        @keyframes starTwinkle {
+            0% { 
+                transform: translateX(0) translateY(0) rotate(0deg);
+                opacity: 0.8;
+            }
+            33% { 
+                transform: translateX(10px) translateY(5px) rotate(120deg);
+                opacity: 0.4;
+            }
+            66% { 
+                transform: translateX(-5px) translateY(-10px) rotate(240deg);
+                opacity: 1;
+            }
+            100% { 
+                transform: translateX(0) translateY(0) rotate(360deg);
+                opacity: 0.8;
+            }
+        }
+        @keyframes nebulaFloat {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(1.1) rotate(180deg); }
+        }
+        @keyframes nebulaDrift {
+            0% { transform: translateX(0) translateY(0); }
+            100% { transform: translateX(100vw) translateY(-50px); }
+        }
+        @keyframes gradientShift {
+            0% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+            100% {
+                background-position: 0% 50%;
+            }
+        }
         @media (prefers-reduced-motion: reduce) {
-            .container, h1, button, textarea, #status, .illuminate-line::before, .particle, * {
+            .container, h1, button, textarea, #status, .illuminate-line::before, .particle, body::before, body::after, .nebula, * {
                 animation: none;
                 transition: none;
             }
@@ -426,6 +512,9 @@
     </style>
 </head>
 <body>
+    <div class="nebula"></div>
+    <div class="nebula"></div>
+    <div class="nebula"></div>
     <div class="container" role="main">
         <h1 class="text-2xl font-bold mb-4">Real-Time Audio Translator</h1>
         <textarea id="inputText" placeholder="Transcribed English text will appear here..." readonly aria-label="Transcribed English text" aria-live="polite"></textarea>
