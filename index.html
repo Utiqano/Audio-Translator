@@ -150,7 +150,7 @@
             text-align: right;
         }
         textarea.updated {
-            animation: glowPulse 0.5s ease-in-out, textShimmer 1.5s ease-in-out;
+            animation: glowPulse 0.5s ease-in-out, textShimmer 1.5s ease-in-out, kineticType 2s ease-in-out;
         }
         textarea.interim {
             font-style: italic;
@@ -163,6 +163,20 @@
         }
         textarea::placeholder {
             color: rgba(255, 255, 255, 0.6);
+        }
+        .waveform-canvas {
+            width: 100%;
+            height: 60px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            margin: 0.75rem 0;
+            display: none;
+            position: relative;
+            overflow: hidden;
+        }
+        .waveform-canvas.recording {
+            display: block;
+            animation: waveformPulse 1s ease-in-out infinite;
         }
         .button-container {
             display: flex;
@@ -202,6 +216,9 @@
             transform: scale(1.05) rotate(1deg);
             box-shadow: 0 6px 20px rgba(20, 184, 166, 0.5), inset 0 0 10px rgba(255, 255, 255, 0.1);
             background: linear-gradient(45deg, #0d9488, #0891b2);
+        }
+        button.morphing {
+            animation: morphButton 0.6s ease-out;
         }
         button .ripple {
             position: absolute;
@@ -369,6 +386,10 @@
             0% { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); background-size: 200% 100%; }
             100% { background-position: -200% 0; }
         }
+        @keyframes kineticType {
+            0%, 100% { transform: perspective(200px) rotateX(0deg); }
+            50% { transform: perspective(200px) rotateX(5deg); }
+        }
         @keyframes breathe {
             0%, 100% { transform: scale(1); }
             50% { transform: scale(1.005); }
@@ -462,8 +483,17 @@
                 background-position: 0% 50%;
             }
         }
+        @keyframes waveformPulse {
+            0%, 100% { box-shadow: 0 0 10px rgba(244, 63, 94, 0.3); }
+            50% { box-shadow: 0 0 20px rgba(244, 63, 94, 0.6); }
+        }
+        @keyframes morphButton {
+            0% { border-radius: 30px; }
+            50% { border-radius: 50%; }
+            100% { border-radius: 30px; }
+        }
         @media (prefers-reduced-motion: reduce) {
-            .container, h1, button, textarea, #status, .illuminate-line::before, .particle, body::before, body::after, .nebula, * {
+            .container, h1, button, textarea, #status, .illuminate-line::before, .particle, body::before, body::after, .nebula, .waveform-canvas, * {
                 animation: none;
                 transition: none;
             }
@@ -490,6 +520,9 @@
             button, select {
                 padding: 0.6rem 1rem;
                 font-size: 0.9rem;
+            }
+            .waveform-canvas {
+                height: 40px;
             }
         }
         @media (max-width: 400px) {
@@ -518,6 +551,7 @@
     <div class="container" role="main">
         <h1 class="text-2xl font-bold mb-4">Real-Time Audio Translator</h1>
         <textarea id="inputText" placeholder="Transcribed English text will appear here..." readonly aria-label="Transcribed English text" aria-live="polite"></textarea>
+        <div class="waveform-canvas" id="waveformCanvas"></div>
         <div class="illuminate-line" id="illuminateLine"></div>
         <textarea id="translatedText" placeholder="Translated text will appear here..." readonly aria-label="Translated text" aria-live="polite"></textarea>
         <select id="targetLanguage" aria-label="Select target language">
@@ -547,6 +581,7 @@
         const status = document.getElementById('status');
         const targetLanguage = document.getElementById('targetLanguage');
         const illuminateLine = document.getElementById('illuminateLine');
+        const waveformCanvas = document.getElementById('waveformCanvas');
         const container = document.querySelector('.container');
 
         const langMap = {
@@ -559,10 +594,76 @@
         };
 
         let recognition;
+        let audioContext;
+        let analyser;
+        let mediaStreamSource;
+        let dataArray;
+        let canvasContext;
         let isTranslating = false;
         let autoPlay = false;
         let lastTranslationTime = 0;
         const debounceDelay = 1000;
+
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                canvasContext = waveformCanvas.getContext('2d');
+                const bufferLength = 256;
+                const canvasWidth = waveformCanvas.width = waveformCanvas.offsetWidth;
+                const canvasHeight = waveformCanvas.height = 60;
+                dataArray = new Uint8Array(bufferLength);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 2 * bufferLength;
+                analyser.smoothingTimeConstant = 0.8;
+                analyser.getByteTimeDomainData(dataArray);
+            }
+        }
+
+        function drawWaveform() {
+            requestAnimationFrame(drawWaveform);
+            analyser.getByteTimeDomainData(dataArray);
+            canvasContext.fillStyle = 'rgba(255, 255, 255, 0.05)';
+            canvasContext.fillRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+            canvasContext.lineWidth = 2;
+            canvasContext.strokeStyle = '#f43f5e';
+            canvasContext.beginPath();
+            const sliceWidth = waveformCanvas.width / dataArray.length;
+            let x = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = (v * canvasHeight) / 2;
+                if (i === 0) {
+                    canvasContext.moveTo(x, y);
+                } else {
+                    canvasContext.lineTo(x, y);
+                }
+                x += sliceWidth;
+            }
+            canvasContext.lineTo(waveformCanvas.width, canvasHeight / 2);
+            canvasContext.stroke();
+        }
+
+        function startAudio() {
+            initAudio();
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                mediaStreamSource = audioContext.createMediaStreamSource(stream);
+                mediaStreamSource.connect(analyser);
+                drawWaveform();
+            }).catch(err => {
+                console.error('Error accessing microphone for waveform:', err);
+            });
+        }
+
+        function stopAudio() {
+            if (mediaStreamSource) {
+                mediaStreamSource.disconnect();
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            canvasContext.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+        }
 
         function createParticles() {
             const numParticles = 25;
@@ -639,6 +740,8 @@
                             status.className = 'success';
                             illuminateLine.className = 'illuminate-line success';
                             container.classList.add('success');
+                            toggleButton.classList.add('morphing');
+                            setTimeout(() => toggleButton.classList.remove('morphing'), 600);
                             createParticles();
                             setTimeout(() => container.classList.remove('success'), 3000);
                             if (autoPlay) {
@@ -667,6 +770,7 @@
                 status.textContent = `Error: ${event.error}. Ensure your microphone is working.`;
                 status.className = 'error';
                 illuminateLine.className = 'illuminate-line';
+                waveformCanvas.classList.remove('recording');
                 container.classList.remove('success');
                 toggleButton.textContent = 'Start Translation';
                 toggleButton.classList.remove('recording');
@@ -679,6 +783,7 @@
                     illuminateLine.className = 'illuminate-line recording';
                 } else {
                     illuminateLine.className = 'illuminate-line';
+                    waveformCanvas.classList.remove('recording');
                 }
             };
         } else {
@@ -695,8 +800,10 @@
             if (!isTranslating) {
                 try {
                     recognition.start();
+                    startAudio();
                     toggleButton.textContent = 'Stop Translation';
                     toggleButton.classList.add('recording');
+                    waveformCanvas.classList.add('recording');
                     status.textContent = 'Real-time translation started. Speak in English.';
                     status.className = '';
                     illuminateLine.className = 'illuminate-line recording';
@@ -708,8 +815,10 @@
                 }
             } else {
                 recognition.stop();
+                stopAudio();
                 toggleButton.textContent = 'Start Translation';
                 toggleButton.classList.remove('recording');
+                waveformCanvas.classList.remove('recording');
                 status.textContent = 'Translation stopped.';
                 status.className = '';
                 illuminateLine.className = 'illuminate-line';
